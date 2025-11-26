@@ -65,35 +65,93 @@ def monitor_system_usage_ui(output_area):
 
 # --- UI Functions ---
 
+
+def set_status(message, color="black"):
+    # This requires the status_label widget to exist later in the code
+    status_label.config(text=message, fg=color)
+
 def run_scan_thread():
-    # Use threading to prevent the UI from freezing during a long scan
     scan_path = filedialog.askdirectory(title="Select Folder to Scan")
     if scan_path:
         # Clear previous output
         output_area.delete(1.0, tk.END) 
-        # Start the scan in a separate thread
-        thread = threading.Thread(target=scan_directory_ui, args=(scan_path, output_area))
+        
+        # --- NEW CODE: Update status and disable buttons ---
+        set_status(f"Scan started on {scan_path}...", "blue")
+        scan_button.config(state=tk.DISABLED)
+        clean_button.config(state=tk.DISABLED)
+        monitor_button.config(state=tk.DISABLED) # Disable all buttons
+        
+        # --- NEW CODE: Use lambda within thread target to execute multiple steps sequentially ---
+        thread = threading.Thread(target=lambda: (
+            scan_directory_ui(scan_path, output_area),
+            set_status("Scan complete.", "green"),
+            # Re-enable buttons after scan finishes
+            scan_button.config(state=tk.NORMAL),
+            clean_button.config(state=tk.NORMAL),
+            monitor_button.config(state=tk.NORMAL)
+        ))
         thread.start()
     else:
+        # Update status if the dialog is canceled
+        set_status("Folder selection cancelled.", "orange")
         messagebox.showinfo("Scan Cancelled", "Folder selection cancelled.")
+
 
 def run_cleaner_thread():
     output_area.delete(1.0, tk.END)
-    thread = threading.Thread(target=clean_temp_files_ui, args=(output_area,))
+    
+    # --- NEW CODE ---
+    set_status("Cleaning temporary files...", "blue")
+    scan_button.config(state=tk.DISABLED) # Disable other buttons too
+    clean_button.config(state=tk.DISABLED)
+    monitor_button.config(state=tk.DISABLED)
+
+    thread = threading.Thread(target=lambda: (
+        clean_temp_files_ui(output_area),
+        set_status("Cleanup complete.", "green"),
+        # Re-enable buttons after cleanup
+        scan_button.config(state=tk.NORMAL),
+        clean_button.config(state=tk.NORMAL),
+        monitor_button.config(state=tk.NORMAL)
+    ))
     thread.start()
 
 def run_monitor_thread():
     output_area.delete(1.0, tk.END)
-    monitor_system_usage_ui(output_area)
+    
+    # --- NEW CODE: Update status and disable buttons ---
+    set_status("Monitoring system usage...", "blue")
+    scan_button.config(state=tk.DISABLED)
+    clean_button.config(state=tk.DISABLED)
+    monitor_button.config(state=tk.DISABLED)
+
+    # Use a thread even for the monitor as a best practice, although it runs quickly
+    thread = threading.Thread(target=lambda: (
+        monitor_system_usage_ui(output_area),
+        set_status("System monitoring results displayed.", "green"),
+        # Re-enable buttons after monitoring
+        scan_button.config(state=tk.NORMAL),
+        clean_button.config(state=tk.NORMAL),
+        monitor_button.config(state=tk.NORMAL)
+    ))
+    thread.start()
 
 
 # --- Main Application Window ---
+
 
 print("Creating main window")
 
 root = tk.Tk()
 root.title("Python System Utility")
 root.geometry("600x400") # Set the initial window size
+
+
+# Create a label for status messages and place it at the bottom
+status_label = tk.Label(root, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+# Use pack to place it at the bottom, filling horizontally
+status_label.pack(side=tk.BOTTOM, fill=tk.X)
 
 # Create a frame for the buttons
 button_frame = tk.Frame(root)
@@ -115,6 +173,13 @@ exit_button.grid(row=0, column=3, padx=5)
 # Create a scrolled text area for output
 output_area = scrolledtext.ScrolledText(root, wrap=tk.WORD, bg="black", fg="green")
 output_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+# Create a label for status messages
+status_label = tk.Label(root, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+# Use pack to place it at the bottom, filling horizontally
+status_label.pack(side=tk.BOTTOM, fill=tk.X)
+
+
 print("Window created, starting mainloop")
 root.mainloop()
 print("Window closed")
